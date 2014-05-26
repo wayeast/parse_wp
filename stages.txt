@@ -1,0 +1,7 @@
+1. 
+ - count pages
+ - count redirects
+ - get list of element names
+
+2.
+ - find max text length
