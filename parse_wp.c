@@ -6,14 +6,19 @@
 #include <fcntl.h>
 #include <expat.h>
 
-#define BUFF_SIZE  4096
+#define FILEBUFF_SIZE  4096
+#define CHARBUFF_SIZE  4096
 #define NAME_LIST_INCREMENT 50
 
 struct xml_info {
   unsigned int pages;
   unsigned int redirects;
-  char **names;
-  int n_ind;  /* Also == total of name list */
+  XML_Char **names;
+  int name_ind;  /* Also == total of name list */
+
+  //XML_Char *charbuf;
+  //int charbuf_size;
+  //int charbuf_offset;
 };
 
 
@@ -21,7 +26,7 @@ static void
 clear_data(struct xml_info *data)
 {
   int i;
-  for (i=0; i < data->n_ind; i++)
+  for (i=0; i < data->name_ind; i++)
     free(data->names[i]);
   free(data->names);
   //  free(data);
@@ -29,10 +34,10 @@ clear_data(struct xml_info *data)
 
 
 static int
-already_found_name(const char *name, struct xml_info *data)
+already_found_name(const XML_Char *name, struct xml_info *data)
 {
   int i = 0;
-  while (i < data->n_ind) {
+  while (i < data->name_ind) {
     if (strcmp(data->names[i], name) == 0)
       return 1;
     i++;
@@ -42,37 +47,37 @@ already_found_name(const char *name, struct xml_info *data)
 
 
 static void
-add_to_names(const char *name, struct xml_info *data)
+add_to_names(const XML_Char *name, struct xml_info *data)
 {
-  if (!(data->n_ind % NAME_LIST_INCREMENT)) {
+  if (!(data->name_ind % NAME_LIST_INCREMENT)) {
     //printf("incrementing namelist size\n");
-    char **incremented_list;
-    if (!(incremented_list = malloc(sizeof(char *) * 
-				    (data->n_ind + NAME_LIST_INCREMENT)))) {
+    XML_Char **incremented_list;
+    if (!(incremented_list = malloc(sizeof(XML_Char *) * 
+				    (data->name_ind + NAME_LIST_INCREMENT)))) {
       printf("error incrementing namelist size\n");
       clear_data(data);
       exit(EXIT_FAILURE);
     }
     int i;
-    for (i=0; i<data->n_ind; i++)
+    for (i=0; i<data->name_ind; i++)
       incremented_list[i] = data->names[i];
     free(data->names);
     data->names = incremented_list;
   }
 
   int len = strlen(name) + 1;
-  if (!(data->names[data->n_ind] = malloc(sizeof(char) * len))) {
+  if (!(data->names[data->name_ind] = malloc(sizeof(XML_Char) * len))) {
     fprintf(stderr, "Error in malloc'ing space for tag name '%s'\n", name);
     clear_data(data);
     exit(EXIT_FAILURE);
   }
-  strcpy(data->names[data->n_ind], name);
-  data->n_ind++;
+  strcpy(data->names[data->name_ind], name);
+  data->name_ind++;
 }
 
 
 static void XMLCALL
-startElement(void *userData, const char *name, const char **attrs)
+startElement(void *userData, const XML_Char *name, const XML_Char **attrs)
 {
   struct xml_info *start_data = (struct xml_info *) userData;
 
@@ -101,8 +106,9 @@ int main(int argc, char **argv)
   }
   /* Initialize user data and parser */
   struct xml_info userdata;
-  userdata.pages = userdata.redirects = userdata.n_ind = 0;
-  if ((userdata.names = malloc(sizeof(char *) * NAME_LIST_INCREMENT)) == 0) {
+  userdata.pages = userdata.redirects = userdata.name_ind = 0;
+  if ((userdata.names =
+       malloc(sizeof(XML_Char *) * NAME_LIST_INCREMENT)) == 0) {
     printf("could not initialize namelist\n");
     clear_data(&userdata);
     exit(EXIT_FAILURE);
@@ -117,14 +123,14 @@ int main(int argc, char **argv)
 Redirects:%10u  Names:%4d";
   unsigned int mon;
   for (mon=0;;mon++) {
-    void *buf = XML_GetBuffer(parser, BUFF_SIZE);
+    void *buf = XML_GetBuffer(parser, FILEBUFF_SIZE);
     if (buf == NULL) {
       fprintf(stderr, "Error in XML_GetBuffer\n");
       exit(EXIT_FAILURE);
     }
 
     int bytes_read;
-    bytes_read = read(xml_fd, buf, BUFF_SIZE);
+    bytes_read = read(xml_fd, buf, FILEBUFF_SIZE);
     if (bytes_read < 0){
       printf("Error reading from xml file\n");
       exit(EXIT_FAILURE);
@@ -138,7 +144,7 @@ Redirects:%10u  Names:%4d";
     /* Show progress */
     if (mon % 2000 == 0) {
       printf(monitor_string, mon, userdata.pages,
-	     userdata.redirects, userdata.n_ind);
+	     userdata.redirects, userdata.name_ind);
       fflush(stdout);
     } 
 
@@ -156,7 +162,7 @@ Redirects:%10u  Names:%4d";
     exit(EXIT_FAILURE);
   }
   int i;
-  for (i=0; i<userdata.n_ind; i++)
+  for (i=0; i<userdata.name_ind; i++)
     fprintf(f, "%s\n", userdata.names[i]);
 
   printf("tidying up...\n");
